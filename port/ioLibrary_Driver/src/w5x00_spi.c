@@ -15,7 +15,8 @@
 
 #include "wizchip_conf.h"
 #include "w5x00_spi.h"
-
+#include "wiznet_spi_pio.h"
+#include "hardware/pio.h"
 /**
  * ----------------------------------------------------------------------------------------------------
  * Variables
@@ -29,7 +30,20 @@ static uint dma_rx;
 static dma_channel_config dma_channel_config_tx;
 static dma_channel_config dma_channel_config_rx;
 #endif
+#ifdef USE_SPI_PIO
 
+wiznet_spi_config_t g_spi_config = {
+    .data_in_pin = PIN_MISO,
+    .data_out_pin = PIN_MOSI,
+    .cs_pin = PIN_CS,
+    .clock_pin = PIN_SCK,
+    .reset_pin = PIN_RST,
+    .clock_div_major = 2,  // 4,
+    .clock_div_minor = 0,
+};
+
+wiznet_spi_handle_t spi_handle;
+#endif
 /**
  * ----------------------------------------------------------------------------------------------------
  * Functions
@@ -58,19 +72,35 @@ void wizchip_reset()
     bi_decl(bi_1pin_with_name(PIN_RST, "W5x00 RESET"));
 }
 
-static uint8_t wizchip_read(void)
+uint8_t wizchip_read(void)
 {
     uint8_t rx_data = 0;
     uint8_t tx_data = 0xFF;
-
+    
+#ifdef USE_SPI_PIO
+   // pio_spi_read8(&spi, &rx_data, 1);
+    //pio_spi_read8_blocking(&spi, &rx_data, 1);
+    //rx_data = pio_sm_get(spi.pio, spi.sm);
+#else
     spi_read_blocking(SPI_PORT, tx_data, &rx_data, 1);
+#endif
 
     return rx_data;
 }
 
-static void wizchip_write(uint8_t tx_data)
+void wizchip_write(uint8_t tx_data)
 {
+#ifdef USE_SPI_PIO
+    uint8_t rx_data = 0;
+
+    //pio_spi_write8_read8_blocking(&spi, &tx_data, &rx_data, 1);
+    //printf("rx : 0x%x\n", rx_data);
+//    pio_spi_write8(&spi, &tx_data, 1);
+    //pio_spi_write8_blocking(&spi, &tx_data, 1);
+    //pio_sm_put(spi.pio, spi.sm, tx_data);
+#else
     spi_write_blocking(SPI_PORT, &tx_data, 1);
+#endif
 }
 
 #ifdef USE_SPI_DMA
@@ -135,8 +165,13 @@ static void wizchip_critical_section_unlock(void)
 
 void wizchip_spi_initialize(void)
 {
+#ifdef USE_SPI_PIO
+    spi_handle = wiznet_spi_pio_open(&g_spi_config);
+    (*spi_handle)->set_active(spi_handle);
+
+#else
     // this example will use SPI0 at 5MHz
-    spi_init(SPI_PORT, 5000 * 1000);
+    spi_init(SPI_PORT, 35000 * 1000);
 
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
@@ -152,7 +187,6 @@ void wizchip_spi_initialize(void)
 
     // make the SPI pins available to picotool
     bi_decl(bi_1pin_with_name(PIN_CS, "W5x00 CHIP SELECT"));
-
 #ifdef USE_SPI_DMA
     dma_tx = dma_claim_unused_channel(true);
     dma_rx = dma_claim_unused_channel(true);
@@ -170,6 +204,7 @@ void wizchip_spi_initialize(void)
     channel_config_set_read_increment(&dma_channel_config_rx, false);
     channel_config_set_write_increment(&dma_channel_config_rx, true);
 #endif
+#endif
 }
 
 void wizchip_cris_initialize(void)
@@ -180,6 +215,14 @@ void wizchip_cris_initialize(void)
 
 void wizchip_initialize(void)
 {
+#ifdef USE_SPI_PIO
+    (*spi_handle)->frame_end();
+
+    reg_wizchip_spi_cbfunc((*spi_handle)->read_byte, (*spi_handle)->write_byte);
+    reg_wizchip_spiburst_cbfunc((*spi_handle)->read_buffer, (*spi_handle)->write_buffer);
+    reg_wizchip_cs_cbfunc((*spi_handle)->frame_start, (*spi_handle)->frame_end);
+#else
+
     /* Deselect the FLASH : chip select high */
     wizchip_deselect();
 
@@ -188,6 +231,8 @@ void wizchip_initialize(void)
 
     /* SPI function register */
     reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
+#endif
+
 #ifdef USE_SPI_DMA
     reg_wizchip_spiburst_cbfunc(wizchip_read_burst, wizchip_write_burst);
 #endif

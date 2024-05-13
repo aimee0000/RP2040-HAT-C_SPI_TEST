@@ -12,8 +12,11 @@
  * Macros
  * ----------------------------------------------------------------------------------------------------
  */
+
+#define USE_SPI_PIO
+
 /* SPI */
-#define SPI_PORT spi0
+//#define SPI_PORT spi0
 
 #define PIN_SCK 18
 #define PIN_MOSI 19
@@ -57,7 +60,7 @@ static inline void wizchip_deselect(void);
  *
  *  \param none
  */
-static uint8_t wizchip_read(void);
+uint8_t wizchip_read(void);
 
 /*! \brief Write to an SPI device, blocking
  *  \ingroup w5x00_spi
@@ -68,7 +71,7 @@ static uint8_t wizchip_read(void);
  *
  *  \param tx_data Buffer of data to write
  */
-static void wizchip_write(uint8_t tx_data);
+void wizchip_write(uint8_t tx_data);
 
 #ifdef USE_SPI_DMA
 /*! \brief Configure all DMA parameters and optionally start transfer

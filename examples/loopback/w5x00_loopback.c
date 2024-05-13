@@ -77,12 +77,23 @@ int main()
     set_clock_khz();
 
     stdio_init_all();
+    
+    sleep_ms(3000);
+    printf("\n==========\n");
 
     wizchip_spi_initialize();
+    printf("Start1\n");
+
     wizchip_cris_initialize();
+    printf("Start2\n");
 
     wizchip_reset();
+    printf("Start3\n");
+
     wizchip_initialize();
+
+    printf("Start\n");
+
     wizchip_check();
 
     network_initialize(g_net_info);
